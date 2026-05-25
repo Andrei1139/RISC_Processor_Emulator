@@ -29,7 +29,7 @@ Instruction instructions[128];
 short registers[16];
 short outRegister;
 
-// TODO: de inlocuit cod Arduino cu instructiuni AVR
+// TODO: ARDUINO -> AVR
 void i2cPrintText(int row, char *text) {
     i2c.setCursor(0, row);
     i2c.printf(text);
