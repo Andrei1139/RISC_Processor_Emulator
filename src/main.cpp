@@ -44,9 +44,14 @@ short outRegister;
 
 volatile byte displayModified = 1;
 volatile byte runProgram = 0;
+volatile byte outNA = 1;
 volatile byte currentElement = DEFAULT;
 
 ISR(PCINT2_vect) {
+    if (!((PIND & (1 << PD5)) || (PIND & (1 << PD6)) || (PIND & (1 << PD7)))) {
+        return;
+    }
+
     // PD5 - Scroll through options (by increasing)
     if (PIND & (1 << PD5)) {
         if (currentMode == 0) {
@@ -59,7 +64,7 @@ ISR(PCINT2_vect) {
                 instructions[currentMode - 1].arg2 = 0;
             } else if (currentElement == CURR_ARG0) {
                 switch (instructions[currentMode - 1].instruction) {
-                    case ADD: case SUB: case INSERT_VAL: case INSERT_REG:
+                    case ADD: case SUB: case INSERT_VAL: case INSERT_REG: case DISPLAY:
                         instructions[currentMode - 1].arg0 = (instructions[currentMode - 1].arg0 + 1) % NUM_REGISTERS;
                         break;
                     case JMP_IF_EQ:
@@ -85,10 +90,15 @@ ISR(PCINT2_vect) {
             }
         }
     } else if (PIND & (1 << PD6)) { // PD6 - Go backwards through elements
-        // Can't go before instruction count
-        if (currentMode == 0) return;
-        
-        if (currentElement > 0) {
+        // Can't go before instruction count - substitute functionality with decrementation
+        if (currentMode == 0) {
+            if (instructionCount > 0) {
+                volatile Instruction *aux = &instructions[instructionCount - 1];
+                aux->instruction = aux->arg0 = aux->arg1 = aux->arg2 = DEFAULT; 
+            }
+            
+            instructionCount = max(instructionCount - 1, 0);
+        } else if (currentElement > 0) {
             --currentElement;
         } else { // Go back through instructions - find the current instruction element interacted with
             --currentMode;
@@ -113,15 +123,16 @@ ISR(PCINT2_vect) {
     } else if (PIND & (1 << PD7)) { // PD7 - go forward through elements
         // Moving forward inside runnable program - run again
         if (currentMode == instructionCount + 1) {
-            runProgram = true;
+            runProgram = 1;
             return;
         }
 
         // No elements - simply go to the next mode
-        if (currentMode == 0 || instructions[currentMode + 1].instruction == PASS) {
+        if (currentMode == 0 || instructions[currentMode - 1].instruction == PASS) {
+            if (instructionCount == 0) return; // No running if no instructions
             ++currentMode;
         } else {
-            switch (instructions[currentMode + 1].instruction) {
+            switch (instructions[currentMode - 1].instruction) {
                 case ADD: case SUB: case JMP_IF_EQ:
                     if (currentElement < 3) {
                         ++currentElement;
@@ -148,6 +159,11 @@ ISR(PCINT2_vect) {
                     break;
             }
         }
+    }
+
+    if (currentMode == instructionCount + 1) {
+        runProgram = 1;
+        return;
     }
 
     displayModified = true;
@@ -177,6 +193,7 @@ int runInstruction(volatile Instruction *instruction) {
             break;
         case DISPLAY:
             outRegister = registers[instruction->arg0];
+            outNA = 0;
             break;
         case JMP_IF_EQ:
             if (registers[instruction->arg1] == registers[instruction->arg2]) {
@@ -203,7 +220,7 @@ void printInstruction(int instructionID) {
 
     switch (instruction->instruction) {
         case PASS: i2c.printf("PASS"); break;
-        case DISPLAY: i2c.printf("DISPLAY %d", instruction->arg0); break;
+        case DISPLAY: i2c.printf("DISPLAY r%d", instruction->arg0); break;
         case ADD: i2c.printf("ADD r%d r%d r%d", instruction->arg0, instruction->arg1, instruction->arg2); break;
         case SUB: i2c.printf("SUB r%d r%d r%d", instruction->arg0, instruction->arg1, instruction->arg2); break;
         case INSERT_VAL: i2c.printf("IN_VAL r%d %d", instruction->arg0, instruction->arg1); break;
@@ -251,13 +268,12 @@ void loop() {
         sei();
         i2c.clear();
         if (currentMode == 0) { // Set instruction count
-            i2c.printf("Instruction cnt:");
+            i2c.printf("INSTRUCTION CNT:");
             i2c.setCursor(0, 1);
             i2c.printf("%d", instructionCount);
         } else {
             printInstruction(currentMode - 1);
         }
-
         displayModified = 0;
         _delay_ms(200);
         PCICR |= (1 << PCIE2);
@@ -267,15 +283,20 @@ void loop() {
         cli();
         PCICR &= ~(1 << PCIE2);
         sei();
-        // for (int i = 0; i < instructionCount; ++i) {
-        //     runInstruction(instructions + i);
-        //     i2cPrintText(0, "OUT:");
-        //     i2cPrintInt(1, outRegister);
-        //     _delay_ms(500);
-        // }
-        i2c.clear();
-        i2c.printf("runnin");
-        _delay_ms(400);
+        for (int i = 0; i < instructionCount; ++i) {
+            runInstruction(instructions + i);
+            i2c.clear();
+            i2c.printf("INSTRUCTION:%d", i);
+            i2c.setCursor(0, 1);
+            i2c.printf("OUT: ");
+            if (outNA == 0)
+                i2c.printf("%d", outRegister);
+            else
+                i2c.printf("N/A");
+            _delay_ms(500);
+        }
+
+        outNA = 1;
         
         runProgram = 0;
         PCICR |= (1 << PCIE2);
