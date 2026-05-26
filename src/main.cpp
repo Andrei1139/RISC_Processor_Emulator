@@ -29,7 +29,7 @@
 #define CURR_ARG2 3
 
 // Adafruit_ST7735 tft = Adafruit_ST7735(10, 9, 8);
-hd44780_I2Cexp i2c = hd44780_I2Cexp(0x27, 2, 16);
+hd44780_I2Cexp i2c = hd44780_I2Cexp(0x27);
 
 typedef struct {
     byte instruction;
@@ -45,17 +45,6 @@ short outRegister;
 volatile byte displayModified = 1;
 volatile byte runProgram = 0;
 volatile byte currentElement = DEFAULT;
-
-// TODO: ARDUINO -> AVR
-void i2cPrintText(int row, char *text) {
-    i2c.setCursor(0, row);
-    i2c.printf(text);
-}
-
-void i2cPrintInt(int row, int nr) {
-    i2c.setCursor(0, row);
-    i2c.printf("%d", nr);
-}
 
 ISR(PCINT2_vect) {
     // PD5 - Scroll through options (by increasing)
@@ -170,9 +159,15 @@ int runInstruction(volatile Instruction *instruction) {
             break;
         case ADD:
             registers[instruction->arg0] = registers[instruction->arg1] + registers[instruction->arg2];
+            if (registers[instruction->arg0] > MAX_VALUE) {
+                registers[instruction->arg0] = MAX_VALUE;
+            }
             break;
         case SUB:
             registers[instruction->arg0] = registers[instruction->arg1] - registers[instruction->arg2];
+            if (registers[instruction->arg0] < MIN_VALUE) {
+                registers[instruction->arg0] = MIN_VALUE;
+            }
             break;
         case INSERT_VAL:
             registers[instruction->arg0] = instruction->arg1;
@@ -193,6 +188,30 @@ int runInstruction(volatile Instruction *instruction) {
     return -1;
 }
 
+void printInstruction(int instructionID) {
+    i2c.clear();
+    i2c.printf("%d - ", instructionID);
+    switch (currentElement) {
+        case 0: i2c.printf("INSTRUCTION"); break;
+        case 1: i2c.printf("ARGUMENT 0"); break;
+        case 2: i2c.printf("ARGUMENT 1"); break;
+        case 3: i2c.printf("ARGUMENT 2"); break;
+    }
+
+    i2c.setCursor(0, 1);
+    volatile Instruction *instruction = &instructions[instructionID];
+
+    switch (instruction->instruction) {
+        case PASS: i2c.printf("PASS"); break;
+        case DISPLAY: i2c.printf("DISPLAY %d", instruction->arg0); break;
+        case ADD: i2c.printf("ADD r%d r%d r%d", instruction->arg0, instruction->arg1, instruction->arg2); break;
+        case SUB: i2c.printf("SUB r%d r%d r%d", instruction->arg0, instruction->arg1, instruction->arg2); break;
+        case INSERT_VAL: i2c.printf("IN_VAL r%d %d", instruction->arg0, instruction->arg1); break;
+        case INSERT_REG: i2c.printf("IN_RG r%d r%d", instruction->arg0, instruction->arg1); break;
+        case JMP_IF_EQ: i2c.printf("JMP %d r%d r%d", instruction->arg0, instruction->arg1, instruction->arg2); break;
+    }
+}
+
 void setup() {
     Serial.begin(57600);
 
@@ -200,6 +219,14 @@ void setup() {
 
     // tft.initR(INITR_144GREENTAB);
     // tft.fillScreen(ST77XX_RED);
+
+    for (int i = 0; i < NUM_REGISTERS; ++i) {
+        registers[i] = 0;
+    }
+
+    for (int i = 0; i < 128; ++i) {
+        instructions[i].instruction = instructions[i].arg0 = instructions[i].arg1 = instructions[i].arg2 = DEFAULT;
+    }
 
     // Enable input pins
     DDRD &= ~(1 << PD5);
@@ -220,28 +247,37 @@ void setup() {
 void loop() {
     if (displayModified == 1) {
         cli();
+        PCICR &= ~(1 << PCIE2);
+        sei();
+        i2c.clear();
         if (currentMode == 0) { // Set instruction count
-            i2cPrintText(0, "Instruction cnt:");
-            i2cPrintInt(1, instructionCount);
+            i2c.printf("Instruction cnt:");
+            i2c.setCursor(0, 1);
+            i2c.printf("%d", instructionCount);
         } else {
-            i2cPrintInt(0, currentMode - 1);
+            printInstruction(currentMode - 1);
         }
 
         displayModified = 0;
         _delay_ms(200);
-        sei();
+        PCICR |= (1 << PCIE2);
     }
 
     if (runProgram == 1) { // Run program
         cli();
-        for (int i = 0; i < instructionCount; ++i) {
-            runInstruction(instructions + i);
-            i2cPrintText(0, "OUT:");
-            i2cPrintInt(1, outRegister);
-            _delay_ms(500);
-        }
+        PCICR &= ~(1 << PCIE2);
+        sei();
+        // for (int i = 0; i < instructionCount; ++i) {
+        //     runInstruction(instructions + i);
+        //     i2cPrintText(0, "OUT:");
+        //     i2cPrintInt(1, outRegister);
+        //     _delay_ms(500);
+        // }
+        i2c.clear();
+        i2c.printf("runnin");
+        _delay_ms(400);
         
         runProgram = 0;
-        sei();
+        PCICR |= (1 << PCIE2);
     }
 }
