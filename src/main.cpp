@@ -1,8 +1,8 @@
 #define F_CLK 16000000
 #include <Arduino.h>
 #include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_ST7735.h>
+// #include <Adafruit_GFX.h>
+// #include <Adafruit_ST7735.h>
 #include <hd44780.h>
 #include <hd44780ioClass/hd44780_I2Cexp.h>
 #include <SPI.h>
@@ -28,7 +28,7 @@
 #define CURR_ARG1 2
 #define CURR_ARG2 3
 
-Adafruit_ST7735 tft = Adafruit_ST7735(10, 9, 8);
+// Adafruit_ST7735 tft = Adafruit_ST7735(10, 9, 8);
 hd44780_I2Cexp i2c = hd44780_I2Cexp(0x27, 2, 16);
 
 typedef struct {
@@ -223,9 +223,12 @@ void loop() {
         if (currentMode == 0) { // Set instruction count
             i2cPrintText(0, "Instruction cnt:");
             i2cPrintInt(1, instructionCount);
+        } else {
+            i2cPrintInt(0, currentMode - 1);
         }
 
         displayModified = 0;
+        _delay_ms(200);
         sei();
     }
 
