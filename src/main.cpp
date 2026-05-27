@@ -1,8 +1,7 @@
 #define F_CLK 16000000
 #include <Arduino.h>
 #include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_GC9A01A.h>
+// #include <Adafruit_GFX.h>
 // #include <Adafruit_ST7735.h>
 #include <hd44780.h>
 #include <hd44780ioClass/hd44780_I2Cexp.h>
@@ -29,7 +28,7 @@
 #define CURR_ARG1 2
 #define CURR_ARG2 3
 
-Adafruit_GC9A01A spi = Adafruit_GC9A01A(10, 9, 8);
+// Adafruit_ST7735 tft = Adafruit_ST7735(10, 9, 8);
 hd44780_I2Cexp i2c = hd44780_I2Cexp(0x27);
 
 typedef struct {
@@ -233,72 +232,73 @@ void printInstruction(int instructionID) {
 void setup() {
     Serial.begin(57600);
 
-    // i2c.begin(16, 2);
+    i2c.begin(16, 2);
 
-    spi.begin();
-    spi.fillScreen(GC9A01A_BLUE);
-    // for (int i = 0; i < NUM_REGISTERS; ++i) {
-    //     registers[i] = 0;
-    // }
+    // tft.initR(INITR_144GREENTAB);
+    // tft.fillScreen(ST77XX_RED);
 
-    // for (int i = 0; i < 128; ++i) {
-    //     instructions[i].instruction = instructions[i].arg0 = instructions[i].arg1 = instructions[i].arg2 = DEFAULT;
-    // }
+    for (int i = 0; i < NUM_REGISTERS; ++i) {
+        registers[i] = 0;
+    }
 
-    // // Enable input pins
-    // DDRD &= ~(1 << PD5);
-    // DDRD &= ~(1 << PD6);
-    // DDRD &= ~(1 << PD7);
+    for (int i = 0; i < 128; ++i) {
+        instructions[i].instruction = instructions[i].arg0 = instructions[i].arg1 = instructions[i].arg2 = DEFAULT;
+    }
 
-    // // Enable interrupts for the second PCINT family
-    // PCICR |= (1 << PCIE2);
+    // Enable input pins
+    DDRD &= ~(1 << PD5);
+    DDRD &= ~(1 << PD6);
+    DDRD &= ~(1 << PD7);
+
+    // Enable interrupts for the second PCINT family
+    PCICR |= (1 << PCIE2);
     
-    // // Enable individual interrupts
-    // PCMSK2 |= (1 << PCINT21);
-    // PCMSK2 |= (1 << PCINT22);
-    // PCMSK2 |= (1 << PCINT23);
+    // Enable individual interrupts
+    PCMSK2 |= (1 << PCINT21);
+    PCMSK2 |= (1 << PCINT22);
+    PCMSK2 |= (1 << PCINT23);
 
-    // sei();
+    sei();
 }
 
 void loop() {
-    // if (displayModified == 1) {
-    //     cli();
-    //     PCICR &= ~(1 << PCIE2);
-    //     sei();
-    //     i2c.clear();
-    //     if (currentMode == 0) { // Set instruction count
-    //         i2c.printf("INSTRUCTION CNT:");
-    //         i2c.setCursor(0, 1);
-    //         i2c.printf("%d", instructionCount);
-    //     } else {
-    //         printInstruction(currentMode - 1);
-    //     }
-    //     displayModified = 0;
-    //     _delay_ms(200);
-    //     PCICR |= (1 << PCIE2);
-    // }
+    if (displayModified == 1) {
+        cli();
+        PCICR &= ~(1 << PCIE2);
+        sei();
+        i2c.clear();
+        if (currentMode == 0) { // Set instruction count
+            i2c.printf("INSTRUCTION CNT:");
+            i2c.setCursor(0, 1);
+            i2c.printf("%d", instructionCount);
+        } else {
+            printInstruction(currentMode - 1);
+        }
+        displayModified = 0;
+        _delay_ms(200);
+        PCICR |= (1 << PCIE2);
+    }
 
-    // if (runProgram == 1) { // Run program
-    //     cli();
-    //     PCICR &= ~(1 << PCIE2);
-    //     sei();
-    //     for (int i = 0; i < instructionCount; ++i) {
-    //         runInstruction(instructions + i);
-    //         i2c.clear();
-    //         i2c.printf("INSTRUCTION:%d", i);
-    //         i2c.setCursor(0, 1);
-    //         i2c.printf("OUT: ");
-    //         if (outNA == 0)
-    //             i2c.printf("%d", outRegister);
-    //         else
-    //             i2c.printf("N/A");
-    //         _delay_ms(500);
-    //     }
+    if (runProgram == 1) { // Run program
+        cli();
+        PCICR &= ~(1 << PCIE2);
+        sei();
+        for (int i = 0; i < instructionCount; ++i) {
+            runInstruction(instructions + i);
+            i2c.clear();
+            i2c.printf("INSTRUCTION:%d", i);
+            i2c.setCursor(0, 1);
+            i2c.printf("OUT: ");
+            if (outNA == 0)
+                i2c.printf("%d", outRegister);
+            else
+                i2c.printf("N/A");
+            _delay_ms(500);
+        }
 
-    //     outNA = 1;
+        outNA = 1;
         
-    //     runProgram = 0;
-    //     PCICR |= (1 << PCIE2);
-    // }
+        runProgram = 0;
+        PCICR |= (1 << PCIE2);
+    }
 }
